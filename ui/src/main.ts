@@ -4,6 +4,7 @@ import { openCommandPalette, type CommandItem } from "./components/commandPalett
 import { createMessageLog, type MessageLogController } from "./components/messageLog";
 import { createTopBar, type TopBarController } from "./components/topBar";
 import { startFirstRunWizard } from "./components/wizard";
+import { clear, el } from "./dom";
 import { icons } from "./icons";
 import { createSidebar, type SidebarController } from "./sidebar/sidebar";
 import "./styles/tokens.css";
@@ -63,19 +64,17 @@ function mountWorkspace(workspace: Workspace, toggleTheme: () => void) {
   const app = document.getElementById("app");
   if (!app) return;
 
-  app.innerHTML = `
-    <header class="top-bar" id="app-topbar"></header>
-    <div class="main-content">
-      <aside class="sidebar" id="app-sidebar"></aside>
-      <main class="canvas" id="app-canvas"></main>
-    </div>
-    <footer class="message-log collapsed" id="app-messagelog"></footer>
-  `;
+  clear(app);
 
-  const topbarEl = document.getElementById("app-topbar")!;
-  const sidebarEl = document.getElementById("app-sidebar")!;
-  const canvasEl = document.getElementById("app-canvas")!;
-  const messageLogEl = document.getElementById("app-messagelog")!;
+  const topbarEl = el("header", { class: "top-bar", id: "app-topbar" });
+  const sidebarEl = el("aside", { class: "sidebar", id: "app-sidebar" });
+  const canvasEl = el("main", { class: "canvas", id: "app-canvas" });
+  const mainContent = el("div", { class: "main-content" }, sidebarEl, canvasEl);
+  const messageLogEl = el("footer", { class: "message-log collapsed", id: "app-messagelog" });
+
+  app.appendChild(topbarEl);
+  app.appendChild(mainContent);
+  app.appendChild(messageLogEl);
 
   topBar = createTopBar(
     topbarEl,

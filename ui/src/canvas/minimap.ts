@@ -1,3 +1,4 @@
+import { clear } from "../dom";
 import type { CanvasCard } from "../types";
 import type { Viewport } from "./transform";
 
@@ -12,7 +13,7 @@ export interface MinimapOptions {
 
 export function renderMinimap(options: MinimapOptions): void {
   const { container, cards, viewport, viewportWidth, viewportHeight, onJumpTo } = options;
-  container.innerHTML = "";
+  clear(container);
 
   const mapWidth = 140;
   const mapHeight = 90;

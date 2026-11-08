@@ -1,4 +1,5 @@
 import { agentsSpawn, doctorCheck, workspaceAdd } from "../api";
+import { clear, el } from "../dom";
 import type { DoctorResult, Workspace } from "../types";
 
 export interface WizardOptions {
@@ -16,144 +17,225 @@ export function startFirstRunWizard(options: WizardOptions): void {
   let chosenTeam = "pair"; // "solo" | "pair" | "floor"
 
   function render() {
-    container.innerHTML = `
-      <div class="wizard-overlay">
-        <div class="wizard-card">
-          <div class="wizard-header">
-            <span class="brand">NexHub</span>
-            <h2>Welcome to NexHub Setup</h2>
-            <div class="wizard-steps-indicator">
-              <span class="step-pill ${currentStep >= 1 ? "active" : ""}">1. Tools</span>
-              <span class="step-pill ${currentStep >= 2 ? "active" : ""}">2. Repository</span>
-              <span class="step-pill ${currentStep >= 3 ? "active" : ""}">3. Team</span>
-              <span class="step-pill ${currentStep >= 4 ? "active" : ""}">4. Launch</span>
-            </div>
-          </div>
+    clear(container);
 
-          <div class="wizard-body">
-            ${renderStepContent()}
-          </div>
+    const stepsIndicator = el(
+      "div",
+      { class: "wizard-steps-indicator" },
+      el("span", { class: `step-pill ${currentStep >= 1 ? "active" : ""}`, text: "1. Tools" }),
+      el("span", { class: `step-pill ${currentStep >= 2 ? "active" : ""}`, text: "2. Repository" }),
+      el("span", { class: `step-pill ${currentStep >= 3 ? "active" : ""}`, text: "3. Team" }),
+      el("span", { class: `step-pill ${currentStep >= 4 ? "active" : ""}`, text: "4. Launch" })
+    );
 
-          <div class="wizard-footer">
-            ${currentStep > 1 ? `<button class="btn btn-secondary wizard-back-btn">Back</button>` : `<div></div>`}
-            ${
-              currentStep < 4
-                ? `<button class="btn btn-primary wizard-next-btn">Continue</button>`
-                : `<button class="btn btn-primary wizard-finish-btn">Open Canvas</button>`
-            }
-          </div>
-        </div>
-      </div>
-    `;
+    const wizardHeader = el(
+      "div",
+      { class: "wizard-header" },
+      el("span", { class: "brand", text: "NexHub" }),
+      el("h2", { text: "Welcome to NexHub Setup" }),
+      stepsIndicator
+    );
 
-    container.querySelector(".wizard-back-btn")?.addEventListener("click", () => {
-      currentStep--;
-      render();
-    });
+    const wizardBody = el("div", { class: "wizard-body" }, renderStepContent());
 
-    container.querySelector(".wizard-next-btn")?.addEventListener("click", () => {
-      if (currentStep === 2) {
-        const inputPath = (container.querySelector("#wizard-repo-path") as HTMLInputElement)?.value;
-        const inputName = (container.querySelector("#wizard-repo-name") as HTMLInputElement)?.value;
-        if (inputPath) chosenRepoPath = inputPath.trim();
-        if (inputName) chosenWsName = inputName.trim();
-      }
-      currentStep++;
-      render();
-    });
+    const footerLeft = el("div");
+    if (currentStep > 1) {
+      const backBtn = el("button", {
+        class: "btn btn-secondary wizard-back-btn",
+        text: "Back",
+        onClick: () => {
+          currentStep--;
+          render();
+        },
+      });
+      footerLeft.appendChild(backBtn);
+    }
 
-    container.querySelector(".wizard-finish-btn")?.addEventListener("click", async () => {
-      await launchWorkspace();
-    });
+    const nextOrFinishBtn =
+      currentStep < 4
+        ? el("button", {
+            class: "btn btn-primary wizard-next-btn",
+            text: "Continue",
+            onClick: () => {
+              if (currentStep === 2) {
+                const inputPath = container.querySelector("#wizard-repo-path") as HTMLInputElement;
+                const inputName = container.querySelector("#wizard-repo-name") as HTMLInputElement;
+                if (inputPath) chosenRepoPath = inputPath.value.trim();
+                if (inputName) chosenWsName = inputName.value.trim();
+              }
+              currentStep++;
+              render();
+            },
+          })
+        : el("button", {
+            class: "btn btn-primary wizard-finish-btn",
+            text: "Open Canvas",
+            onClick: async () => {
+              await launchWorkspace();
+            },
+          });
 
+    const wizardFooter = el("div", { class: "wizard-footer" }, footerLeft, nextOrFinishBtn);
+
+    const wizardCard = el("div", { class: "wizard-card" }, wizardHeader, wizardBody, wizardFooter);
+
+    const wizardOverlay = el("div", { class: "wizard-overlay" }, wizardCard);
+
+    container.appendChild(wizardOverlay);
     attachStepEvents();
   }
 
-  function renderStepContent(): string {
+  function renderStepContent(): HTMLElement {
+    const stepContainer = el("div", { class: "wizard-step" });
+
     switch (currentStep) {
       case 1: {
-        return `
-          <div class="wizard-step">
-            <h3>Step 1: Environment & Tool Diagnostics</h3>
-            <p class="wizard-desc">NexHub connects coding agents and tools together. Checking your installed CLI tools:</p>
-            <div class="tool-list" id="tool-diagnostics">
-              ${
-                doctorResults
-                  ? renderToolList(doctorResults)
-                  : `<div class="tool-checking">Checking installed tools (git, agy, claude, gh, node)...</div>`
-              }
-            </div>
-          </div>
-        `;
+        stepContainer.appendChild(el("h3", { text: "Step 1: Environment & Tool Diagnostics" }));
+        stepContainer.appendChild(
+          el("p", {
+            class: "wizard-desc",
+            text: "NexHub connects coding agents and tools together. Checking your installed CLI tools:",
+          })
+        );
+        const toolListEl = el("div", { class: "tool-list", id: "tool-diagnostics" });
+        if (doctorResults) {
+          renderToolList(doctorResults).forEach((item) => toolListEl.appendChild(item));
+        } else {
+          toolListEl.appendChild(
+            el("div", {
+              class: "tool-checking",
+              text: "Checking installed tools (git, agy, claude, gh, node)...",
+            })
+          );
+        }
+        stepContainer.appendChild(toolListEl);
+        break;
       }
       case 2: {
-        return `
-          <div class="wizard-step">
-            <h3>Step 2: Choose Repository</h3>
-            <p class="wizard-desc">Select a local git repository folder to manage as your first workspace:</p>
-            <div class="form-group">
-              <label for="wizard-repo-name">Workspace name:</label>
-              <input id="wizard-repo-name" class="input-text" type="text" value="${chosenWsName}" />
-            </div>
-            <div class="form-group">
-              <label for="wizard-repo-path">Repository folder path:</label>
-              <input id="wizard-repo-path" class="input-text" type="text" value="${chosenRepoPath}" />
-            </div>
-          </div>
-        `;
+        stepContainer.appendChild(el("h3", { text: "Step 2: Choose Repository" }));
+        stepContainer.appendChild(
+          el("p", {
+            class: "wizard-desc",
+            text: "Select a local git repository folder to manage as your first workspace:",
+          })
+        );
+
+        const nameInput = el("input", {
+          id: "wizard-repo-name",
+          class: "input-text",
+          attrs: { type: "text" },
+        });
+        nameInput.value = chosenWsName;
+
+        const pathInput = el("input", {
+          id: "wizard-repo-path",
+          class: "input-text",
+          attrs: { type: "text" },
+        });
+        pathInput.value = chosenRepoPath;
+
+        stepContainer.appendChild(
+          el(
+            "div",
+            { class: "form-group" },
+            el("label", { attrs: { for: "wizard-repo-name" }, text: "Workspace name:" }),
+            nameInput
+          )
+        );
+
+        stepContainer.appendChild(
+          el(
+            "div",
+            { class: "form-group" },
+            el("label", { attrs: { for: "wizard-repo-path" }, text: "Repository folder path:" }),
+            pathInput
+          )
+        );
+        break;
       }
       case 3: {
-        return `
-          <div class="wizard-step">
-            <h3>Step 3: Select Starting Team</h3>
-            <p class="wizard-desc">Choose which agents to spawn initially on your canvas:</p>
-            <div class="team-options">
-              <label class="team-option ${chosenTeam === "solo" ? "selected" : ""}">
-                <input type="radio" name="team" value="solo" ${chosenTeam === "solo" ? "checked" : ""} />
-                <div class="team-option-content">
-                  <div class="team-title">Solo</div>
-                  <div class="team-desc">One autonomous agy agent ready to tackle tasks.</div>
-                </div>
-              </label>
+        stepContainer.appendChild(el("h3", { text: "Step 3: Select Starting Team" }));
+        stepContainer.appendChild(
+          el("p", {
+            class: "wizard-desc",
+            text: "Choose which agents to spawn initially on your canvas:",
+          })
+        );
 
-              <label class="team-option ${chosenTeam === "pair" ? "selected" : ""}">
-                <input type="radio" name="team" value="pair" ${chosenTeam === "pair" ? "checked" : ""} />
-                <div class="team-option-content">
-                  <div class="team-title">Pair Programming (Recommended)</div>
-                  <div class="team-desc">Builder (agy) + Reviewer (Claude Code) connected on one floor.</div>
-                </div>
-              </label>
+        const teamOptions = el("div", { class: "team-options" });
 
-              <label class="team-option ${chosenTeam === "floor" ? "selected" : ""}">
-                <input type="radio" name="team" value="floor" ${chosenTeam === "floor" ? "checked" : ""} />
-                <div class="team-option-content">
-                  <div class="team-title">Floor Team</div>
-                  <div class="team-desc">Conductor coordinator plus two parallel builder workers.</div>
-                </div>
-              </label>
-            </div>
-          </div>
-        `;
+        const optionsConfig = [
+          {
+            value: "solo",
+            title: "Solo",
+            desc: "One autonomous agy agent ready to tackle tasks.",
+          },
+          {
+            value: "pair",
+            title: "Pair Programming (Recommended)",
+            desc: "Builder (agy) + Reviewer (Claude Code) connected on one floor.",
+          },
+          {
+            value: "floor",
+            title: "Floor Team",
+            desc: "Conductor coordinator plus two parallel builder workers.",
+          },
+        ];
+
+        optionsConfig.forEach((cfg) => {
+          const radio = el("input", {
+            attrs: {
+              type: "radio",
+              name: "team",
+              value: cfg.value,
+            },
+          });
+          radio.checked = chosenTeam === cfg.value;
+
+          const optLabel = el(
+            "label",
+            { class: `team-option ${chosenTeam === cfg.value ? "selected" : ""}` },
+            radio,
+            el(
+              "div",
+              { class: "team-option-content" },
+              el("div", { class: "team-title", text: cfg.title }),
+              el("div", { class: "team-desc", text: cfg.desc })
+            )
+          );
+
+          teamOptions.appendChild(optLabel);
+        });
+
+        stepContainer.appendChild(teamOptions);
+        break;
       }
       case 4: {
-        return `
-          <div class="wizard-step">
-            <h3>Step 4: Ready to Launch</h3>
-            <p class="wizard-desc">We will create your workspace and open the infinite canvas with your selected team.</p>
-            <div class="wizard-summary">
-              <div><strong>Workspace:</strong> ${chosenWsName}</div>
-              <div><strong>Path:</strong> ${chosenRepoPath}</div>
-              <div><strong>Team Preset:</strong> ${chosenTeam.toUpperCase()}</div>
-            </div>
-          </div>
-        `;
+        stepContainer.appendChild(el("h3", { text: "Step 4: Ready to Launch" }));
+        stepContainer.appendChild(
+          el("p", {
+            class: "wizard-desc",
+            text: "We will create your workspace and open the infinite canvas with your selected team.",
+          })
+        );
+
+        const summary = el(
+          "div",
+          { class: "wizard-summary" },
+          el("div", {}, el("strong", { text: "Workspace: " }), document.createTextNode(chosenWsName)),
+          el("div", {}, el("strong", { text: "Path: " }), document.createTextNode(chosenRepoPath)),
+          el("div", {}, el("strong", { text: "Team Preset: " }), document.createTextNode(chosenTeam.toUpperCase()))
+        );
+
+        stepContainer.appendChild(summary);
+        break;
       }
-      default:
-        return "";
     }
+
+    return stepContainer;
   }
 
-  function renderToolList(res: DoctorResult): string {
+  function renderToolList(res: DoctorResult): HTMLElement[] {
     const tools = [
       { name: "git", ok: res.git, hint: "Required for worktrees and branches. Install git." },
       { name: "agy", ok: res.agy, hint: "Google Antigravity CLI. Install agy." },
@@ -162,19 +244,26 @@ export function startFirstRunWizard(options: WizardOptions): void {
       { name: "node", ok: res.node, hint: "Node.js runtime. Install node." },
     ];
 
-    return tools
-      .map(
-        (t) => `
-        <div class="tool-item ${t.ok ? "tool-ok" : "tool-missing"}">
-          <div class="tool-item-header">
-            <span class="tool-badge ${t.ok ? "badge-ok" : "badge-warn"}">${t.ok ? "FOUND" : "MISSING"}</span>
-            <span class="tool-name">${t.name}</span>
-          </div>
-          <div class="tool-hint">${t.ok ? res.details[t.name] || "Ready" : t.hint}</div>
-        </div>
-      `
-      )
-      .join("");
+    return tools.map((t) => {
+      const itemHeader = el(
+        "div",
+        { class: "tool-item-header" },
+        el("span", {
+          class: `tool-badge ${t.ok ? "badge-ok" : "badge-warn"}`,
+          text: t.ok ? "FOUND" : "MISSING",
+        }),
+        el("span", { class: "tool-name", text: t.name })
+      );
+
+      const hintText = t.ok ? res.details[t.name] || "Ready" : t.hint;
+
+      return el(
+        "div",
+        { class: `tool-item ${t.ok ? "tool-ok" : "tool-missing"}` },
+        itemHeader,
+        el("div", { class: "tool-hint", text: hintText })
+      );
+    });
   }
 
   function attachStepEvents() {
@@ -214,7 +303,6 @@ export function startFirstRunWizard(options: WizardOptions): void {
         group_id: "grp_1",
       });
 
-      // Spawn starting agents based on chosen team
       if (chosenTeam === "solo") {
         await agentsSpawn({
           workspace: wsRes.workspace.id,

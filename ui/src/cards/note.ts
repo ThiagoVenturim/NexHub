@@ -1,28 +1,27 @@
+import DOMPurify from "dompurify";
 import { notesSet } from "../api";
 import { debounce } from "../canvas/layout";
+import { clear, el } from "../dom";
 import { icons } from "../icons";
 
+function getPurifier() {
+  if (typeof DOMPurify === "function") {
+    if (typeof window !== "undefined") {
+      return (DOMPurify as unknown as (win: Window) => typeof DOMPurify)(window);
+    }
+  }
+  return DOMPurify;
+}
+
 export function sanitizeHtml(html: string): string {
-  let clean = html;
-
-  // Strip script tags and their content
-  clean = clean.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "");
-
-  // Strip iframe, object, embed, style, form, input, button tags
-  clean = clean.replace(/<\/?(iframe|object|embed|style|form|input|button)\b[^>]*>/gi, "");
-
-  // Strip event handler attributes (e.g., onerror, onload, onclick, onmouseover, etc.)
-  clean = clean.replace(/\s+on[a-z]+\s*=\s*(?:'[^']*'|"[^"]*"|[^\s>]+)/gi, "");
-
-  // Strip javascript:, vbscript:, data:text/html links
-  clean = clean.replace(/\bhref\s*=\s*['"]?\s*(?:javascript|vbscript|data\s*:\s*text\/html):/gi, "href=\"#blocked:");
-  clean = clean.replace(/\bsrc\s*=\s*['"]?\s*(?:javascript|vbscript|data\s*:\s*text\/html):/gi, "src=\"#blocked:");
-
-  return clean;
+  const purifier = getPurifier();
+  return purifier.sanitize(html, {
+    USE_PROFILES: { html: true },
+  });
 }
 
 export function renderMarkdown(markdown: string): string {
-  // First strip dangerous HTML like scripts and event handlers
+  // First strip dangerous script tags and malicious attributes with DOMPurify
   let text = sanitizeHtml(markdown);
 
   // Code blocks: ```code```
@@ -116,9 +115,10 @@ export function createNoteCardElement(
   element: HTMLElement;
   saveImmediately: () => void;
 } {
-  const container = document.createElement("div");
-  container.className = "card-inner note-card";
-  container.dataset.cardId = cardId;
+  const container = el("div", {
+    class: "card-inner note-card",
+    dataset: { cardId },
+  });
 
   let currentTitle = initialTitle;
   let currentBody = initialBody;
@@ -133,29 +133,15 @@ export function createNoteCardElement(
   }, 800);
 
   function render() {
-    container.innerHTML = `
-      <div class="card-header">
-        <div class="card-header-left">
-          <span class="card-icon">${icons.note}</span>
-          <input class="note-title-input" type="text" value="${currentTitle.replace(/"/g, "&quot;")}" placeholder="Note title" />
-        </div>
-        <div class="card-header-actions">
-          <button class="card-action-btn toggle-view-btn" title="${isEditing ? "Preview" : "Edit"}">
-            ${isEditing ? icons.eye : icons.edit}
-          </button>
-        </div>
-      </div>
-      <div class="note-body">
-        ${
-          isEditing
-            ? `<textarea class="note-textarea" placeholder="Write markdown...">${currentBody}</textarea>`
-            : `<div class="note-preview">${renderMarkdown(currentBody) || '<span class="note-empty">Empty note. Click edit to add content.</span>'}</div>`
-        }
-      </div>
-    `;
+    clear(container);
 
-    const titleInput = container.querySelector(".note-title-input") as HTMLInputElement;
-    titleInput?.addEventListener("change", (e) => {
+    const titleInput = el("input", {
+      class: "note-title-input",
+      attrs: { type: "text", placeholder: "Note title" },
+    });
+    titleInput.value = currentTitle;
+
+    titleInput.addEventListener("change", (e) => {
       currentTitle = (e.target as HTMLInputElement).value.trim() || "untitled";
       if (onTitleChange) {
         onTitleChange(currentTitle);
@@ -163,20 +149,59 @@ export function createNoteCardElement(
       debouncedSave(currentTitle, currentBody);
     });
 
-    const toggleBtn = container.querySelector(".toggle-view-btn");
-    toggleBtn?.addEventListener("click", () => {
+    const toggleBtn = el(
+      "button",
+      {
+        class: "card-action-btn toggle-view-btn",
+        title: isEditing ? "Preview" : "Edit",
+        html: isEditing ? icons.eye : icons.edit,
+      }
+    );
+
+    toggleBtn.addEventListener("click", () => {
       isEditing = !isEditing;
       render();
     });
 
-    const textarea = container.querySelector(".note-textarea") as HTMLTextAreaElement;
-    if (textarea) {
+    const header = el(
+      "div",
+      { class: "card-header" },
+      el("div", { class: "card-header-left" }, el("span", { class: "card-icon", html: icons.note }), titleInput),
+      el("div", { class: "card-header-actions" }, toggleBtn)
+    );
+
+    const noteBody = el("div", { class: "note-body" });
+
+    if (isEditing) {
+      const textarea = el("textarea", {
+        class: "note-textarea",
+        attrs: { placeholder: "Write markdown..." },
+      });
+      textarea.value = currentBody;
       textarea.addEventListener("input", (e) => {
         currentBody = (e.target as HTMLTextAreaElement).value;
         debouncedSave(currentTitle, currentBody);
       });
-      textarea.focus();
+      noteBody.appendChild(textarea);
+      setTimeout(() => textarea.focus(), 0);
+    } else {
+      const preview = el("div", { class: "note-preview" });
+      const renderedHtml = renderMarkdown(currentBody);
+      if (renderedHtml) {
+        preview.innerHTML = renderedHtml;
+      } else {
+        preview.appendChild(
+          el("span", {
+            class: "note-empty",
+            text: "Empty note. Click edit to add content.",
+          })
+        );
+      }
+      noteBody.appendChild(preview);
     }
+
+    container.appendChild(header);
+    container.appendChild(noteBody);
   }
 
   render();

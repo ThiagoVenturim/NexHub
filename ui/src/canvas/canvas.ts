@@ -1,6 +1,7 @@
 import { agentsList, agentsSpawn, layoutSave, notesList, onMessage } from "../api";
 import { createNoteCardElement } from "../cards/note";
 import { createTerminalCard, type TerminalCardHandle } from "../cards/terminal";
+import { clear, el } from "../dom";
 import type { Agent, CanvasCard, CanvasConnection, CanvasLayout, PortSide } from "../types";
 import { getPortPosition, hitTestPort } from "./hitTest";
 import { debounce, deserializeLayout, serializeLayout } from "./layout";
@@ -21,7 +22,7 @@ export interface CanvasController {
 }
 
 export function createCanvas(container: HTMLElement, workspaceId: string): CanvasController {
-  container.innerHTML = "";
+  clear(container);
   container.classList.add("nexhub-canvas-root");
 
   // Create layer hierarchy
@@ -115,7 +116,7 @@ export function createCanvas(container: HTMLElement, workspaceId: string): Canva
   }
 
   function renderConnections() {
-    svgConnections.innerHTML = "";
+    clear(svgConnections);
     svgConnections.style.width = "100%";
     svgConnections.style.height = "100%";
 
@@ -466,17 +467,17 @@ export function createCanvas(container: HTMLElement, workspaceId: string): Canva
     const existing = document.getElementById("canvas-context-menu");
     if (existing) existing.remove();
 
-    const menu = document.createElement("div");
-    menu.id = "canvas-context-menu";
-    menu.className = "context-menu";
-    menu.style.left = `${screenX}px`;
-    menu.style.top = `${screenY}px`;
-
-    menu.innerHTML = `
-      <div class="context-menu-item" data-action="agent">Add Agent Card...</div>
-      <div class="context-menu-item" data-action="note">Add Note Card</div>
-      <div class="context-menu-item" data-action="shell">Add Shell Card</div>
-    `;
+    const menu = el(
+      "div",
+      {
+        id: "canvas-context-menu",
+        class: "context-menu",
+        style: { left: `${screenX}px`, top: `${screenY}px` },
+      },
+      el("div", { class: "context-menu-item", dataset: { action: "agent" }, text: "Add Agent Card..." }),
+      el("div", { class: "context-menu-item", dataset: { action: "note" }, text: "Add Note Card" }),
+      el("div", { class: "context-menu-item", dataset: { action: "shell" }, text: "Add Shell Card" })
+    );
 
     document.body.appendChild(menu);
 
@@ -633,7 +634,7 @@ export function createCanvas(container: HTMLElement, workspaceId: string): Canva
   }
 
   function reRenderAllCards() {
-    cardsContainer.innerHTML = "";
+    clear(cardsContainer);
     for (const card of cards) {
       const handle = cardHandles.get(card.id);
       if (handle) {
@@ -705,7 +706,7 @@ export function createCanvas(container: HTMLElement, workspaceId: string): Canva
       notesList(),
     ]);
 
-    cardsContainer.innerHTML = "";
+    clear(cardsContainer);
     cardHandles.forEach((h) => {
       if ("dispose" in h) h.dispose();
     });

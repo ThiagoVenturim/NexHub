@@ -9,6 +9,7 @@ import {
   routinesRemove,
   workspacesList,
 } from "../api";
+import { clear, el, sanitizeFloorStatus } from "../dom";
 import { icons } from "../icons";
 import type { Floor, Group, Routine, Workspace } from "../types";
 
@@ -23,7 +24,7 @@ export function createSidebar(
   onSelectWorkspace: (workspace: Workspace) => void,
   onNewFloorRequest?: () => void
 ): SidebarController {
-  container.innerHTML = "";
+  clear(container);
   container.className = "sidebar";
 
   let groups: Group[] = [];
@@ -53,35 +54,33 @@ export function createSidebar(
   }
 
   function render() {
-    container.innerHTML = "";
+    clear(container);
 
     // 1. Groups & Workspaces section
-    const groupsSection = document.createElement("div");
-    groupsSection.className = "sidebar-section";
+    const groupsHeader = el(
+      "div",
+      { class: "sidebar-section-header" },
+      el("span", { class: "sidebar-section-title", text: "Workspaces" }),
+      el("button", {
+        class: "sidebar-add-btn add-workspace-btn",
+        title: "Add workspace",
+        html: icons.plus,
+      })
+    );
 
-    const groupsHeader = document.createElement("div");
-    groupsHeader.className = "sidebar-section-header";
-    groupsHeader.innerHTML = `
-      <span class="sidebar-section-title">Workspaces</span>
-      <button class="sidebar-add-btn add-workspace-btn" title="Add workspace">${icons.plus}</button>
-    `;
-    groupsSection.appendChild(groupsHeader);
-
-    // Group items
-    const groupsListEl = document.createElement("div");
-    groupsListEl.className = "sidebar-groups-list";
+    const groupsListEl = el("div", { class: "sidebar-groups-list" });
 
     for (const group of groups) {
-      const groupEl = document.createElement("div");
-      groupEl.className = "sidebar-group";
-
       const isCollapsed = collapsedGroups.has(group.id);
-      const groupHeader = document.createElement("div");
-      groupHeader.className = "sidebar-group-header";
-      groupHeader.innerHTML = `
-        <span class="group-collapse-icon">${isCollapsed ? icons.chevronRight : icons.chevronDown}</span>
-        <span class="group-name">${group.name}</span>
-      `;
+      const groupHeader = el(
+        "div",
+        { class: "sidebar-group-header" },
+        el("span", {
+          class: "group-collapse-icon",
+          html: isCollapsed ? icons.chevronRight : icons.chevronDown,
+        }),
+        el("span", { class: "group-name", text: group.name })
+      );
 
       groupHeader.addEventListener("click", () => {
         if (collapsedGroups.has(group.id)) {
@@ -92,30 +91,28 @@ export function createSidebar(
         render();
       });
 
-      groupEl.appendChild(groupHeader);
+      const groupEl = el("div", { class: "sidebar-group" }, groupHeader);
 
       if (!isCollapsed) {
         const groupWorkspaces = workspaces.filter((w) => w.group_id === group.id);
-        const wsList = document.createElement("ul");
-        wsList.className = "sidebar-list";
+        const wsList = el("ul", { class: "sidebar-list" });
 
         for (const ws of groupWorkspaces) {
-          const wsItem = document.createElement("li");
-          wsItem.className = `sidebar-item workspace-item ${ws.id === currentWorkspaceId ? "active" : ""}`;
-          wsItem.innerHTML = `
-            <span class="sidebar-item-icon">${icons.folder}</span>
-            <span class="sidebar-item-label">${ws.name}</span>
-          `;
-
-          wsItem.addEventListener("click", () => {
-            onSelectWorkspace(ws);
-          });
-
-          // Right click context menu
-          wsItem.addEventListener("contextmenu", (e) => {
-            e.preventDefault();
-            openWorkspaceContextMenu(e.clientX, e.clientY, ws);
-          });
+          const wsItem = el(
+            "li",
+            {
+              class: `sidebar-item workspace-item ${ws.id === currentWorkspaceId ? "active" : ""}`,
+              onClick: () => {
+                onSelectWorkspace(ws);
+              },
+              onContextMenu: (e) => {
+                e.preventDefault();
+                openWorkspaceContextMenu(e.clientX, e.clientY, ws);
+              },
+            },
+            el("span", { class: "sidebar-item-icon", html: icons.folder }),
+            el("span", { class: "sidebar-item-label", text: ws.name })
+          );
 
           wsList.appendChild(wsItem);
         }
@@ -126,117 +123,131 @@ export function createSidebar(
       groupsListEl.appendChild(groupEl);
     }
 
-    groupsSection.appendChild(groupsListEl);
+    const groupsSection = el(
+      "div",
+      { class: "sidebar-section" },
+      groupsHeader,
+      groupsListEl
+    );
     container.appendChild(groupsSection);
 
     // 2. Floors section
-    const floorsSection = document.createElement("div");
-    floorsSection.className = "sidebar-section";
-
-    const floorsHeader = document.createElement("div");
-    floorsHeader.className = "sidebar-section-header";
-    floorsHeader.innerHTML = `
-      <span class="sidebar-section-title">Floors</span>
-      <button class="sidebar-add-btn add-floor-btn" title="New floor">${icons.plus}</button>
-    `;
-
-    floorsHeader.querySelector(".add-floor-btn")?.addEventListener("click", () => {
-      if (onNewFloorRequest) {
-        onNewFloorRequest();
-      } else {
-        openNewFloorPrompt();
-      }
+    const addFloorBtn = el("button", {
+      class: "sidebar-add-btn add-floor-btn",
+      title: "New floor",
+      html: icons.plus,
+      onClick: () => {
+        if (onNewFloorRequest) {
+          onNewFloorRequest();
+        } else {
+          openNewFloorPrompt();
+        }
+      },
     });
 
-    floorsSection.appendChild(floorsHeader);
+    const floorsHeader = el(
+      "div",
+      { class: "sidebar-section-header" },
+      el("span", { class: "sidebar-section-title", text: "Floors" }),
+      addFloorBtn
+    );
 
-    const floorsListEl = document.createElement("ul");
-    floorsListEl.className = "sidebar-list";
+    const floorsListEl = el("ul", { class: "sidebar-list" });
 
     for (const fl of floors) {
-      const flItem = document.createElement("li");
-      flItem.className = "sidebar-item floor-item";
-      flItem.innerHTML = `
-        <span class="floor-status-dot status-${fl.status}"></span>
-        <span class="sidebar-item-label">${fl.name}</span>
-        <span class="floor-badge badge-${fl.status}">${fl.status}</span>
-      `;
-
-      flItem.addEventListener("contextmenu", (e) => {
-        e.preventDefault();
-        openFloorContextMenu(e.clientX, e.clientY, fl);
-      });
+      const safeStatus = sanitizeFloorStatus(fl.status);
+      const flItem = el(
+        "li",
+        {
+          class: "sidebar-item floor-item",
+          onContextMenu: (e) => {
+            e.preventDefault();
+            openFloorContextMenu(e.clientX, e.clientY, fl);
+          },
+        },
+        el("span", { class: `floor-status-dot status-${safeStatus}` }),
+        el("span", { class: "sidebar-item-label", text: fl.name }),
+        el("span", { class: `floor-badge badge-${safeStatus}`, text: fl.status })
+      );
 
       floorsListEl.appendChild(flItem);
     }
 
     if (floors.length === 0) {
-      const emptyEl = document.createElement("li");
-      emptyEl.className = "sidebar-item-empty";
-      emptyEl.textContent = "No floors active";
-      floorsListEl.appendChild(emptyEl);
+      floorsListEl.appendChild(
+        el("li", { class: "sidebar-item-empty", text: "No floors active" })
+      );
     }
 
-    floorsSection.appendChild(floorsListEl);
+    const floorsSection = el("div", { class: "sidebar-section" }, floorsHeader, floorsListEl);
     container.appendChild(floorsSection);
 
     // 3. Routines section
-    const routinesSection = document.createElement("div");
-    routinesSection.className = "sidebar-section";
-
-    const routinesHeader = document.createElement("div");
-    routinesHeader.className = "sidebar-section-header";
-    routinesHeader.innerHTML = `
-      <span class="sidebar-section-title">Routines</span>
-      <button class="sidebar-add-btn add-routine-btn" title="Add routine">${icons.plus}</button>
-    `;
-
-    routinesHeader.querySelector(".add-routine-btn")?.addEventListener("click", () => {
-      openNewRoutinePrompt();
+    const addRoutineBtn = el("button", {
+      class: "sidebar-add-btn add-routine-btn",
+      title: "Add routine",
+      html: icons.plus,
+      onClick: () => {
+        openNewRoutinePrompt();
+      },
     });
 
-    routinesSection.appendChild(routinesHeader);
+    const routinesHeader = el(
+      "div",
+      { class: "sidebar-section-header" },
+      el("span", { class: "sidebar-section-title", text: "Routines" }),
+      addRoutineBtn
+    );
 
-    const routinesListEl = document.createElement("ul");
-    routinesListEl.className = "sidebar-list";
+    const routinesListEl = el("ul", { class: "sidebar-list" });
 
     for (const rt of routines) {
-      const rtItem = document.createElement("li");
-      rtItem.className = "sidebar-item routine-item";
       const nextRun = rt.next_run_at ? new Date(rt.next_run_at).toLocaleTimeString() : rt.schedule;
 
-      rtItem.innerHTML = `
-        <span class="routine-info">
-          <span class="sidebar-item-label">${rt.name}</span>
-          <span class="routine-meta">${nextRun}</span>
-        </span>
-        <label class="toggle-switch">
-          <input type="checkbox" ${rt.enabled ? "checked" : ""} class="routine-toggle" />
-          <span class="slider"></span>
-        </label>
-      `;
-
-      const toggle = rtItem.querySelector(".routine-toggle") as HTMLInputElement;
-      toggle?.addEventListener("change", (e) => {
+      const checkbox = el("input", {
+        class: "routine-toggle",
+        attrs: { type: "checkbox" },
+      });
+      checkbox.checked = Boolean(rt.enabled);
+      checkbox.addEventListener("change", (e) => {
         rt.enabled = (e.target as HTMLInputElement).checked ? 1 : 0;
       });
 
-      rtItem.addEventListener("contextmenu", (e) => {
-        e.preventDefault();
-        openRoutineContextMenu(e.clientX, e.clientY, rt);
-      });
+      const toggleLabel = el(
+        "label",
+        { class: "toggle-switch" },
+        checkbox,
+        el("span", { class: "slider" })
+      );
+
+      const rtItem = el(
+        "li",
+        {
+          class: "sidebar-item routine-item",
+          onContextMenu: (e) => {
+            e.preventDefault();
+            openRoutineContextMenu(e.clientX, e.clientY, rt);
+          },
+        },
+        el(
+          "span",
+          { class: "routine-info" },
+          el("span", { class: "sidebar-item-label", text: rt.name }),
+          el("span", { class: "routine-meta", text: nextRun })
+        ),
+        toggleLabel
+      );
 
       routinesListEl.appendChild(rtItem);
     }
 
     if (routines.length === 0) {
-      const emptyEl = document.createElement("li");
-      emptyEl.className = "sidebar-item-empty";
-      emptyEl.textContent = "No routines scheduled";
-      routinesListEl.appendChild(emptyEl);
+      routinesListEl.appendChild(
+        el("li", { class: "sidebar-item-empty", text: "No routines scheduled" })
+      );
     }
 
-    routinesSection.appendChild(routinesListEl);
+    const routinesSection = el("div", { class: "sidebar-section" }, routinesHeader, routinesListEl);
     container.appendChild(routinesSection);
   }
 
@@ -244,17 +255,17 @@ export function createSidebar(
     const existing = document.getElementById("sidebar-context-menu");
     if (existing) existing.remove();
 
-    const menu = document.createElement("div");
-    menu.id = "sidebar-context-menu";
-    menu.className = "context-menu";
-    menu.style.left = `${x}px`;
-    menu.style.top = `${y}px`;
-
-    menu.innerHTML = `
-      <div class="context-menu-item" data-action="rename">Rename workspace...</div>
-      <div class="context-menu-item" data-action="move">Move to group...</div>
-      <div class="context-menu-item danger" data-action="remove">Remove workspace</div>
-    `;
+    const menu = el(
+      "div",
+      {
+        id: "sidebar-context-menu",
+        class: "context-menu",
+        style: { left: `${x}px`, top: `${y}px` },
+      },
+      el("div", { class: "context-menu-item", dataset: { action: "rename" }, text: "Rename workspace..." }),
+      el("div", { class: "context-menu-item", dataset: { action: "move" }, text: "Move to group..." }),
+      el("div", { class: "context-menu-item danger", dataset: { action: "remove" }, text: "Remove workspace" })
+    );
 
     document.body.appendChild(menu);
 
@@ -294,16 +305,16 @@ export function createSidebar(
     const existing = document.getElementById("sidebar-context-menu");
     if (existing) existing.remove();
 
-    const menu = document.createElement("div");
-    menu.id = "sidebar-context-menu";
-    menu.className = "context-menu";
-    menu.style.left = `${x}px`;
-    menu.style.top = `${y}px`;
-
-    menu.innerHTML = `
-      <div class="context-menu-item" data-action="merge">Merge into develop</div>
-      <div class="context-menu-item danger" data-action="remove">Remove floor</div>
-    `;
+    const menu = el(
+      "div",
+      {
+        id: "sidebar-context-menu",
+        class: "context-menu",
+        style: { left: `${x}px`, top: `${y}px` },
+      },
+      el("div", { class: "context-menu-item", dataset: { action: "merge" }, text: "Merge into develop" }),
+      el("div", { class: "context-menu-item danger", dataset: { action: "remove" }, text: "Remove floor" })
+    );
 
     document.body.appendChild(menu);
 
@@ -342,15 +353,15 @@ export function createSidebar(
     const existing = document.getElementById("sidebar-context-menu");
     if (existing) existing.remove();
 
-    const menu = document.createElement("div");
-    menu.id = "sidebar-context-menu";
-    menu.className = "context-menu";
-    menu.style.left = `${x}px`;
-    menu.style.top = `${y}px`;
-
-    menu.innerHTML = `
-      <div class="context-menu-item danger" data-action="delete">Delete routine</div>
-    `;
+    const menu = el(
+      "div",
+      {
+        id: "sidebar-context-menu",
+        class: "context-menu",
+        style: { left: `${x}px`, top: `${y}px` },
+      },
+      el("div", { class: "context-menu-item danger", dataset: { action: "delete" }, text: "Delete routine" })
+    );
 
     document.body.appendChild(menu);
 

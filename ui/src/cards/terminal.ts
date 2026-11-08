@@ -2,6 +2,7 @@ import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
 import "@xterm/xterm/css/xterm.css";
 import { agentsSpawn, agentsStop, msgNotify, onAgentState, onPtyOutput, ptyResize, ptyWrite } from "../api";
+import { clear, el, sanitizeAgentState } from "../dom";
 import { icons } from "../icons";
 import type { Agent, AgentState } from "../types";
 
@@ -51,19 +52,29 @@ export function createTerminalCard(options: TerminalCardOptions): TerminalCardHa
   let currentAgent = { ...agent };
   let isMaximized = Boolean(options.isMaximized);
 
-  const container = document.createElement("div");
-  container.className = "card-inner terminal-card";
-  container.dataset.cardId = cardId;
-  container.dataset.agentId = currentAgent.id;
+  const container = el("div", {
+    class: "card-inner terminal-card",
+    dataset: { cardId, agentId: currentAgent.id },
+  });
 
-  const header = document.createElement("div");
-  header.className = "card-header";
-
-  const terminalBody = document.createElement("div");
-  terminalBody.className = "terminal-body";
+  const header = el("div", { class: "card-header" });
+  const terminalBody = el("div", { class: "terminal-body" });
 
   container.appendChild(header);
   container.appendChild(terminalBody);
+
+  if (typeof window !== "undefined" && typeof window.matchMedia !== "function") {
+    window.matchMedia = (query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    });
+  }
 
   // Initialize xterm
   const term = new Terminal({
@@ -83,74 +94,124 @@ export function createTerminalCard(options: TerminalCardOptions): TerminalCardHa
   term.loadAddon(fitAddon);
 
   function renderHeader() {
+    clear(header);
+
+    const safeState = sanitizeAgentState(currentAgent.state);
     const quotaText =
       currentAgent.state === "waiting_quota" && currentAgent.quota_reset_at
         ? ` (${new Date(currentAgent.quota_reset_at).toLocaleTimeString()})`
         : "";
 
-    header.innerHTML = `
-      <div class="card-header-left">
-        <span class="card-icon">${icons.terminal}</span>
-        <span class="agent-name" title="${currentAgent.name}">${currentAgent.name}</span>
-        <span class="badge preset-badge">${currentAgent.preset}</span>
-        ${currentAgent.role ? `<span class="badge role-badge">${currentAgent.role}</span>` : ""}
-        ${currentAgent.floor_id ? `<span class="badge floor-badge">${currentAgent.floor_id.replace(/^fl_/, "")}</span>` : ""}
-        <span class="state-pill state-${currentAgent.state}">
-          <span class="state-dot"></span>
-          <span class="state-label">${currentAgent.state}${quotaText}</span>
-        </span>
-      </div>
-      <div class="card-header-actions">
-        <button class="card-action-btn send-msg-btn" title="Send message">${icons.messageSquare}</button>
-        <button class="card-action-btn restart-btn" title="Restart">${icons.refresh}</button>
-        <button class="card-action-btn stop-btn" title="Stop">${icons.stop}</button>
-        <button class="card-action-btn maximize-btn" title="${isMaximized ? "Restore (Esc)" : "Maximize"}">
-          ${isMaximized ? icons.minimize : icons.maximize}
-        </button>
-      </div>
-    `;
+    const headerLeft = el("div", { class: "card-header-left" });
+    headerLeft.appendChild(el("span", { class: "card-icon", html: icons.terminal }));
 
-    // Hook buttons
-    header.querySelector(".restart-btn")?.addEventListener("click", async (e) => {
-      e.stopPropagation();
-      try {
-        term.write("\r\n\x1b[33m[Restarting agent...]\x1b[0m\r\n");
-        await agentsSpawn({
-          workspace: currentAgent.workspace_id,
-          name: currentAgent.name,
-          preset: currentAgent.preset,
-          role: currentAgent.role || undefined,
-          floor: currentAgent.floor_id || undefined,
-        });
-      } catch (err) {
-        term.write(`\r\n\x1b[31m[Restart failed: ${String(err)}]\x1b[0m\r\n`);
-      }
+    const nameEl = el("span", {
+      class: "agent-name",
+      text: currentAgent.name,
+      title: currentAgent.name,
+    });
+    headerLeft.appendChild(nameEl);
+
+    const presetEl = el("span", {
+      class: "badge preset-badge",
+      text: currentAgent.preset,
+    });
+    headerLeft.appendChild(presetEl);
+
+    if (currentAgent.role) {
+      const roleEl = el("span", {
+        class: "badge role-badge",
+        text: currentAgent.role,
+      });
+      headerLeft.appendChild(roleEl);
+    }
+
+    if (currentAgent.floor_id) {
+      const floorEl = el("span", {
+        class: "badge floor-badge",
+        text: currentAgent.floor_id.replace(/^fl_/, ""),
+      });
+      headerLeft.appendChild(floorEl);
+    }
+
+    const statePill = el(
+      "span",
+      { class: `state-pill state-${safeState}` },
+      el("span", { class: "state-dot" }),
+      el("span", { class: "state-label", text: `${currentAgent.state}${quotaText}` })
+    );
+    headerLeft.appendChild(statePill);
+
+    const headerActions = el("div", { class: "card-header-actions" });
+
+    const sendBtn = el("button", {
+      class: "card-action-btn send-msg-btn",
+      title: "Send message",
+      html: icons.messageSquare,
+      onClick: (e) => {
+        e.stopPropagation();
+        openMessageComposer(currentAgent.name);
+      },
     });
 
-    header.querySelector(".stop-btn")?.addEventListener("click", async (e) => {
-      e.stopPropagation();
-      try {
-        await agentsStop(currentAgent.name);
-        term.write("\r\n\x1b[33m[Agent stopped]\x1b[0m\r\n");
-      } catch (err) {
-        term.write(`\r\n\x1b[31m[Stop failed: ${String(err)}]\x1b[0m\r\n`);
-      }
+    const restartBtn = el("button", {
+      class: "card-action-btn restart-btn",
+      title: "Restart",
+      html: icons.refresh,
+      onClick: async (e) => {
+        e.stopPropagation();
+        try {
+          term.write("\r\n\x1b[33m[Restarting agent...]\x1b[0m\r\n");
+          await agentsSpawn({
+            workspace: currentAgent.workspace_id,
+            name: currentAgent.name,
+            preset: currentAgent.preset,
+            role: currentAgent.role || undefined,
+            floor: currentAgent.floor_id || undefined,
+          });
+        } catch (err) {
+          term.write(`\r\n\x1b[31m[Restart failed: ${String(err)}]\x1b[0m\r\n`);
+        }
+      },
     });
 
-    header.querySelector(".send-msg-btn")?.addEventListener("click", (e) => {
-      e.stopPropagation();
-      openMessageComposer(currentAgent.name);
+    const stopBtn = el("button", {
+      class: "card-action-btn stop-btn",
+      title: "Stop",
+      html: icons.stop,
+      onClick: async (e) => {
+        e.stopPropagation();
+        try {
+          await agentsStop(currentAgent.name);
+          term.write("\r\n\x1b[33m[Agent stopped]\x1b[0m\r\n");
+        } catch (err) {
+          term.write(`\r\n\x1b[31m[Stop failed: ${String(err)}]\x1b[0m\r\n`);
+        }
+      },
     });
 
-    header.querySelector(".maximize-btn")?.addEventListener("click", (e) => {
-      e.stopPropagation();
-      isMaximized = !isMaximized;
-      if (onToggleMaximize) {
-        onToggleMaximize();
-      }
-      renderHeader();
-      setTimeout(fit, 100);
+    const maxBtn = el("button", {
+      class: "card-action-btn maximize-btn",
+      title: isMaximized ? "Restore (Esc)" : "Maximize",
+      html: isMaximized ? icons.minimize : icons.maximize,
+      onClick: (e) => {
+        e.stopPropagation();
+        isMaximized = !isMaximized;
+        if (onToggleMaximize) {
+          onToggleMaximize();
+        }
+        renderHeader();
+        setTimeout(fit, 100);
+      },
     });
+
+    headerActions.appendChild(sendBtn);
+    headerActions.appendChild(restartBtn);
+    headerActions.appendChild(stopBtn);
+    headerActions.appendChild(maxBtn);
+
+    header.appendChild(headerLeft);
+    header.appendChild(headerActions);
   }
 
   function openMessageComposer(targetAgent: string) {
@@ -159,35 +220,39 @@ export function createTerminalCard(options: TerminalCardOptions): TerminalCardHa
       existing.remove();
     }
 
-    const modal = document.createElement("div");
-    modal.id = "terminal-composer-modal";
-    modal.className = "modal-overlay";
-    modal.innerHTML = `
-      <div class="modal-card">
-        <div class="modal-header">
-          <span>Send message to ${targetAgent}</span>
-          <button class="modal-close-btn">&times;</button>
-        </div>
-        <div class="modal-body">
-          <textarea class="modal-textarea" placeholder="Type prompt or instruction to agent..."></textarea>
-        </div>
-        <div class="modal-footer">
-          <button class="btn btn-secondary modal-cancel-btn">Cancel</button>
-          <button class="btn btn-primary modal-send-btn">Send</button>
-        </div>
-      </div>
-    `;
+    const titleEl = el("span", { text: `Send message to ${targetAgent}` });
+    const closeBtn = el("button", { class: "modal-close-btn", text: "\u00D7" });
+
+    const modalHeader = el("div", { class: "modal-header" }, titleEl, closeBtn);
+
+    const textarea = el("textarea", {
+      class: "modal-textarea",
+      attrs: { placeholder: "Type prompt or instruction to agent..." },
+    });
+
+    const modalBody = el("div", { class: "modal-body" }, textarea);
+
+    const cancelBtn = el("button", { class: "btn btn-secondary modal-cancel-btn", text: "Cancel" });
+    const sendBtn = el("button", { class: "btn btn-primary modal-send-btn", text: "Send" });
+
+    const modalFooter = el("div", { class: "modal-footer" }, cancelBtn, sendBtn);
+
+    const modalCard = el("div", { class: "modal-card" }, modalHeader, modalBody, modalFooter);
+
+    const modal = el(
+      "div",
+      { id: "terminal-composer-modal", class: "modal-overlay" },
+      modalCard
+    );
 
     document.body.appendChild(modal);
-
-    const textarea = modal.querySelector(".modal-textarea") as HTMLTextAreaElement;
-    textarea?.focus();
+    textarea.focus();
 
     const closeModal = () => modal.remove();
-    modal.querySelector(".modal-close-btn")?.addEventListener("click", closeModal);
-    modal.querySelector(".modal-cancel-btn")?.addEventListener("click", closeModal);
+    closeBtn.addEventListener("click", closeModal);
+    cancelBtn.addEventListener("click", closeModal);
 
-    modal.querySelector(".modal-send-btn")?.addEventListener("click", async () => {
+    sendBtn.addEventListener("click", async () => {
       const body = textarea.value.trim();
       if (!body) return;
       try {

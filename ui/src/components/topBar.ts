@@ -1,4 +1,5 @@
 import { status } from "../api";
+import { clear, el } from "../dom";
 import { icons } from "../icons";
 
 export interface TopBarController {
@@ -13,51 +14,86 @@ export function createTopBar(
   onOpenPalette: () => void,
   onToggleTheme: () => void
 ): TopBarController {
+  clear(container);
   container.className = "top-bar";
 
   let workspaceName = initialWorkspaceName;
+  let statusBadgeEl: HTMLElement;
+  let wsNameEl: HTMLElement;
 
   function render() {
-    container.innerHTML = `
-      <div class="top-bar-left">
-        <span class="brand">NexHub</span>
-        <span class="workspace-name" id="topbar-ws-name">${workspaceName}</span>
-      </div>
-      <div class="top-bar-center">
-        <div class="search-box" id="topbar-search-box">
-          <span class="search-icon">${icons.search}</span>
-          <input class="search-input" type="text" placeholder="Search agents, notes, commands... (Ctrl+K)" readonly />
-          <kbd class="search-kbd">Ctrl+K</kbd>
-        </div>
-      </div>
-      <div class="top-bar-right">
-        <button class="topbar-btn theme-toggle-btn" title="Toggle theme (Dark/Light)" id="topbar-theme-btn">
-          ${icons.sun}
-        </button>
-        <div class="status-badge" id="app-status">status: loading...</div>
-      </div>
-    `;
+    clear(container);
 
-    container.querySelector("#topbar-search-box")?.addEventListener("click", () => {
-      onOpenPalette();
+    wsNameEl = el("span", {
+      class: "workspace-name",
+      id: "topbar-ws-name",
+      text: workspaceName,
     });
 
-    container.querySelector("#topbar-theme-btn")?.addEventListener("click", () => {
-      onToggleTheme();
+    const topBarLeft = el(
+      "div",
+      { class: "top-bar-left" },
+      el("span", { class: "brand", text: "NexHub" }),
+      wsNameEl
+    );
+
+    const searchInput = el("input", {
+      class: "search-input",
+      attrs: {
+        type: "text",
+        placeholder: "Search agents, notes, commands... (Ctrl+K)",
+        readonly: "true",
+      },
     });
+
+    const searchBox = el(
+      "div",
+      {
+        class: "search-box",
+        id: "topbar-search-box",
+        onClick: () => {
+          onOpenPalette();
+        },
+      },
+      el("span", { class: "search-icon", html: icons.search }),
+      searchInput,
+      el("kbd", { class: "search-kbd", text: "Ctrl+K" })
+    );
+
+    const topBarCenter = el("div", { class: "top-bar-center" }, searchBox);
+
+    const themeBtn = el("button", {
+      class: "topbar-btn theme-toggle-btn",
+      id: "topbar-theme-btn",
+      title: "Toggle theme (Dark/Light)",
+      html: icons.sun,
+      onClick: () => {
+        onToggleTheme();
+      },
+    });
+
+    statusBadgeEl = el("div", {
+      class: "status-badge",
+      id: "app-status",
+      text: "status: loading...",
+    });
+
+    const topBarRight = el("div", { class: "top-bar-right" }, themeBtn, statusBadgeEl);
+
+    container.appendChild(topBarLeft);
+    container.appendChild(topBarCenter);
+    container.appendChild(topBarRight);
   }
 
   async function updateStatus() {
     try {
       const res = await status();
-      const statusEl = container.querySelector("#app-status");
-      if (statusEl) {
-        statusEl.textContent = `status: ${res.agents_running} running`;
+      if (statusBadgeEl) {
+        statusBadgeEl.textContent = `status: ${res.agents_running} running`;
       }
     } catch {
-      const statusEl = container.querySelector("#app-status");
-      if (statusEl) {
-        statusEl.textContent = "status: offline";
+      if (statusBadgeEl) {
+        statusBadgeEl.textContent = "status: offline";
       }
     }
   }
@@ -69,8 +105,9 @@ export function createTopBar(
     element: container,
     setWorkspaceName: (name: string) => {
       workspaceName = name;
-      const wsEl = container.querySelector("#topbar-ws-name");
-      if (wsEl) wsEl.textContent = name;
+      if (wsNameEl) {
+        wsNameEl.textContent = name;
+      }
     },
     updateStatus,
   };

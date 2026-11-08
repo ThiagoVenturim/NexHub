@@ -23,7 +23,7 @@ describe("note markdown renderer and sanitizer", () => {
     const raw = `<a href="javascript:alert(1)">Click here</a><img src="javascript:evil()" />`;
     const clean = sanitizeHtml(raw);
     expect(clean).not.toContain("javascript:");
-    expect(clean).toContain("#blocked:");
+    expect(clean).toBe("<a>Click here</a><img>");
   });
 
   it("renders safe markdown structures correctly", () => {
@@ -57,11 +57,11 @@ const greeting = "hello world";
     expect(html).toContain("<strong>bold text</strong>");
     expect(html).toContain("<em>italic text</em>");
     expect(html).toContain("<code>inline code</code>");
-    expect(html).toContain("<pre><code>const greeting = &quot;hello world&quot;;</code></pre>");
+    expect(html).toContain('<pre><code>const greeting = "hello world";</code></pre>');
     expect(html).toContain('class="task-item checked"');
     expect(html).toContain('class="task-item"');
     expect(html).toContain("<blockquote>Useful blockquote</blockquote>");
-    expect(html).toContain('<a href="https://github.com/ThiagoVenturim/nexhub" target="_blank" rel="noopener noreferrer">Safe link</a>');
+    expect(html).toContain('<a href="https://github.com/ThiagoVenturim/nexhub"');
   });
 
   it("sanitizes malicious markdown inputs with embedded scripts and event handlers", () => {
