@@ -1,0 +1,12 @@
+name: agy
+program: agy
+args: ["--model", "gemini-3.8-flash"]
+env: {}
+add_dirs_flag: "--add-dir"
+system_prompt_flag: null
+first_message: role
+quota_patterns:
+  - "Waiting for quota reset"
+  - "(?i)quota exceeded"
+quota_reset_regex: null
+idle_ms: 3000

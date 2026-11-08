@@ -1,0 +1,10 @@
+name: shell
+program: powershell.exe
+args: ["-NoLogo"]
+env: {}
+add_dirs_flag: null
+system_prompt_flag: null
+first_message: none
+quota_patterns: []
+quota_reset_regex: null
+idle_ms: 3000

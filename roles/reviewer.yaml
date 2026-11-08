@@ -1,0 +1,9 @@
+name: reviewer
+title: Reviewer
+preset: claude
+add_dirs: ["${repo}"]
+prompt: |
+  You are the reviewer for floor ${floor} in ${repo}.
+  Review incoming PRs for correctness, security, repo standards, and no emoji.
+budget:
+  max_hours_per_day: 8

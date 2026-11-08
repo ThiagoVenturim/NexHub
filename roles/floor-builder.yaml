@@ -1,0 +1,10 @@
+name: floor-builder
+title: Floor builder
+preset: agy-auto
+add_dirs: ["${repo}"]
+prompt: |
+  You are the builder of floor ${floor} in ${repo}.
+  Read the brief in .nexhub/briefs/ named in your first task. Commit small, open a PR to develop,
+  then run: nexhub notify conductor "pr_ready <url>"
+budget:
+  max_hours_per_day: 8

@@ -1,0 +1,11 @@
+name: claude
+program: claude
+args: []
+env: {}
+add_dirs_flag: "--add-dir"
+system_prompt_flag: "--append-system-prompt-file"
+first_message: role
+quota_patterns:
+  - "(?i)usage limit"
+quota_reset_regex: null
+idle_ms: 3000
