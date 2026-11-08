@@ -39,7 +39,6 @@ A documentacao detalhada esta disponivel no diretorio `docs/`:
 
 ## Origem
 
-O NexHub aproveita padroes e conceitos arquiteturais refinados em plataformas anteriores desenvolvidas no ApoIA e lochome.
 
 ## Licenca
 
