@@ -1,0 +1,10 @@
+[workspace]
+members = [
+    "crates/nexhub-core",
+    "crates/nexhub-cli",
+    "src-tauri",
+]
+resolver = "2"
+
+[profile.release]
+lto = "thin"
