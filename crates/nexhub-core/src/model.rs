@@ -242,6 +242,18 @@ pub struct Agent {
     pub created_at: i64,
 }
 
+pub type AgentRef = Agent;
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AgentSummary {
+    pub id: String,
+    pub name: String,
+    pub state: AgentState,
+    pub floor: Option<String>,
+    pub preset: String,
+    pub role: Option<String>,
+}
+
 /// Message exchanged across agents or between human/CLI and agents.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Message {
@@ -268,6 +280,20 @@ pub struct Note {
     pub updated_at: i64,
 }
 
+pub type NoteRef = Note;
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct FloorRef {
+    pub id: String,
+    pub workspace_id: String,
+    pub name: String,
+    pub branch: String,
+    pub path: String,
+    pub base_ref: String,
+    pub status: String,
+    pub created_at: i64,
+}
+
 /// Canvas connection edge between agents and/or notes.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Connection {
@@ -288,6 +314,16 @@ pub struct Routine {
     pub body: String,
     pub enabled: bool,
     pub next_run_at: Option<i64>,
+}
+
+pub type RoutineRef = Routine;
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct AppStatus {
+    pub version: String,
+    pub workspaces: Vec<String>,
+    pub agents_running: usize,
+    pub queued_messages: usize,
 }
 
 /// Execution record of a routine run.
@@ -338,6 +374,19 @@ impl Default for SpawnSpec {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_enum_serialization() {
+        assert_eq!(
+            serde_json::to_string(&AgentState::WaitingQuota).unwrap(),
+            "\"waiting_quota\""
+        );
+        assert_eq!(serde_json::to_string(&MessageKind::Ask).unwrap(), "\"ask\"");
+        assert_eq!(
+            serde_json::to_string(&MessageState::Delivered).unwrap(),
+            "\"delivered\""
+        );
+    }
 
     #[test]
     fn test_enums_roundtrip() {
