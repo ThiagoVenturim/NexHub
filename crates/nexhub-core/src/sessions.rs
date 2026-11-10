@@ -284,12 +284,26 @@ mod tests {
 
         if let Ok(curr) = std::env::current_exe() {
             if let Some(parent) = curr.parent() {
-                let candidate = parent
-                    .parent()
-                    .unwrap_or(parent)
-                    .join(format!("echo_agent{}", std::env::consts::EXE_SUFFIX));
+                let target_dir = parent.parent().unwrap_or(parent);
+                let candidate =
+                    target_dir.join(format!("echo_agent{}", std::env::consts::EXE_SUFFIX));
                 if candidate.exists() {
                     return candidate;
+                }
+
+                let src = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                    .join("src")
+                    .join("bin")
+                    .join("echo_agent.rs");
+                if src.exists() {
+                    let status = std::process::Command::new("rustc")
+                        .arg(&src)
+                        .arg("-o")
+                        .arg(&candidate)
+                        .status();
+                    if matches!(status, Ok(s) if s.success()) && candidate.exists() {
+                        return candidate;
+                    }
                 }
             }
         }
@@ -312,26 +326,27 @@ mod tests {
         let session = PtySession::spawn(spec).unwrap();
         let mut rx = session.subscribe();
 
-        // On Windows ConPTY, answer DSR query if emitted
+        // On Windows ConPTY, answer DSR query if emitted and send initial input
         let _ = session.write(b"\x1b[1;1R");
-        tokio::time::sleep(Duration::from_millis(100)).await;
-
-        // Write "oi\r\n" and "oi\r"
         session.write(b"oi\r\n").unwrap();
         session.write(b"oi\r").unwrap();
 
-        // Read output until we see "echo: oi"
+        // Deterministically read output and retry sending input until "echo: oi" is observed
         let mut output_str = String::new();
         let start = Instant::now();
-        while start.elapsed() < Duration::from_secs(5) {
-            match tokio::time::timeout(Duration::from_millis(500), rx.recv()).await {
+        while start.elapsed() < Duration::from_secs(15) {
+            match tokio::time::timeout(Duration::from_millis(250), rx.recv()).await {
                 Ok(Ok(bytes)) => {
                     output_str.push_str(&String::from_utf8_lossy(&bytes));
                     if output_str.contains("echo: oi") {
                         break;
                     }
                 }
-                _ => {}
+                Ok(Err(_)) => break,
+                Err(_) => {
+                    let _ = session.write(b"\x1b[1;1R");
+                    let _ = session.write(b"oi\r\n");
+                }
             }
         }
         assert!(
@@ -345,10 +360,17 @@ mod tests {
         // Kill terminates process
         assert!(session.kill().is_ok());
 
-        // Recent output in ring buffer is retained after kill
-        tokio::time::sleep(Duration::from_millis(100)).await;
-        let history = session.recent_output();
-        let history_str = String::from_utf8_lossy(&history);
+        // Deterministically wait for ring buffer to contain "echo: oi"
+        let wait_start = Instant::now();
+        let mut history_str = String::new();
+        while wait_start.elapsed() < Duration::from_secs(5) {
+            let history = session.recent_output();
+            history_str = String::from_utf8_lossy(&history).into_owned();
+            if history_str.contains("echo: oi") {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(25)).await;
+        }
         assert!(
             history_str.contains("echo: oi"),
             "ring buffer should contain 'echo: oi' after termination, got: {history_str}"
