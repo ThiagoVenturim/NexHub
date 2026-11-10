@@ -39,7 +39,6 @@ Detailed documentation is available in the `docs/` directory:
 
 ## Origin
 
-NexHub draws architectural insights and patterns from earlier internal platforms developed within ApoIA and lochome.
 
 ## License
 
